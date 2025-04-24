@@ -1,0 +1,80 @@
+error[E0432]: unresolved import `crate::state::bonding_curve_state::BondingCurveState`
+ --> programs/sendor/src/instructions/create_launch.rs:8:5
+  |
+8 | use crate::state::bonding_curve_state::BondingCurveState;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `BondingCurveState` in `state::bonding_curve_state`
+
+error[E0432]: unresolved import `crate::state::bonding_curve_state::BondingCurveState`
+ --> programs/sendor/src/instructions/buy.rs:7:5
+  |
+7 | use crate::state::bonding_curve_state::BondingCurveState;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `BondingCurveState` in `state::bonding_curve_state`
+
+error[E0432]: unresolved import `crate::state::bonding_curve_state::BondingCurveState`
+ --> programs/sendor/src/instructions/sell.rs:6:5
+  |
+6 | use crate::state::bonding_curve_state::BondingCurveState;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `BondingCurveState` in `state::bonding_curve_state`
+
+error[E0433]: failed to resolve: use of undeclared crate or module `spl_token`
+ --> programs/sendor/src/instructions/create_launch.rs:4:5
+  |
+4 | use spl_token::instruction::AuthorityType;
+  |     ^^^^^^^^^ use of undeclared crate or module `spl_token`
+
+error[E0433]: failed to resolve: use of undeclared crate or module `spl_token`
+ --> programs/sendor/src/instructions/migrate.rs:4:5
+  |
+4 | use spl_token::instruction::AuthorityType;
+  |     ^^^^^^^^^ use of undeclared crate or module `spl_token`
+
+error[E0432]: unresolved import `crate::state::bonding_curve_state::BondingCurveState`
+ --> programs/sendor/src/instructions/migrate.rs:7:5
+  |
+7 | use crate::state::bonding_curve_state::BondingCurveState;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `BondingCurveState` in `state::bonding_curve_state`
+
+error[E0432]: unresolved import `crate`
+  --> programs/sendor/src/lib.rs:33:1
+   |
+33 | #[program]
+   | ^^^^^^^^^^
+   | |
+   | unresolved import
+   | help: a similar path exists: `crate::instructions::transfer::__client_accounts_transfer_tokens`
+   |
+   = note: this error originates in the attribute macro `program` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused import: `anchor_lang::prelude::*`
+ --> programs/sendor/src/constants.rs:1:5
+  |
+1 | use anchor_lang::prelude::*;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+error[E0308]: mismatched types
+  --> programs/sendor/src/lib.rs:46:32
+   |
+46 |         instructions::buy::buy(ctx, amount)
+   |         ---------------------- ^^^ expected `&Context<'_, '_, '_, '_, ...>`, found `Context<'_, '_, '_, '_, Buy<'_>>`
+   |         |
+   |         arguments to this function are incorrect
+   |
+   = note: expected reference `&anchor_lang::context::Context<'_, '_, '_, '_, buy::Buy<'_>>`
+                 found struct `anchor_lang::context::Context<'_, '_, '_, '_, buy::Buy<'_>>`
+note: function defined here
+  --> programs/sendor/src/instructions/buy.rs:31:8
+   |
+31 | pub fn buy(ctx: &Context<Buy>, amount: u64) -> Result<()> {
+   |        ^^^ ------------------
+help: consider borrowing here
+   |
+46 |         instructions::buy::buy(&ctx, amount)
+   |                                +
+
+Some errors have detailed explanations: E0308, E0432, E0433.
+For more information about an error, try `rustc --explain E0308`.
+warning: `sendor` (lib) generated 1 warning
+error: could not compile `sendor` (lib) due to 8 previous errors; 1 warning emitted
+paritoshkumar@MacBookPro sendor % 
