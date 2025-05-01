@@ -2,22 +2,23 @@ use anchor_lang::prelude::*;
 
 #[account]
 pub struct LaunchMetadata {
-    pub token_mint: Pubkey,     // The SPL token mint for this launch
-    pub vault: Pubkey,          // Token account (vault) holding unsold tokens
-    pub launch_id: u64,         // Unique launch identifier (matches the global launch_count at creation)
-    pub current_day: u64,       // Current day index for trading cycles (increments daily)
-    pub window1_start: i64,     // Start timestamp of the first daily trading window (UTC Unix time)
-    pub window2_start: i64,     // Start timestamp of the second daily trading window (UTC Unix time)
-    pub bump: u8,               // PDA bump for this LaunchMetadata (for signing authority)
+    pub token_mint: Pubkey,
+    pub vault: Pubkey,
+    pub launch_id: u64,
+    pub current_day: u64,
+    pub window1_start: i64,
+    pub window1_len: i64,
+    pub window2_start: i64,
+    pub window2_len: i64,
+    pub bump: u8,
 }
 
 impl LaunchMetadata {
-    pub const LEN: usize = 8     // discriminator
-        + 32                     // token_mint
-        + 32                     // vault
-        + 8                      // launch_id
-        + 8                      // current_day
-        + 8                      // window1_start
-        + 8                      // window2_start
-        + 1;                     // bump
+    pub const LEN: usize = 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 + 1;
+
+    pub fn is_window_open(&self, now: i64) -> bool {
+        let t = now % 86_400;
+        (t >= self.window1_start && t < self.window1_start + self.window1_len)
+            || (t >= self.window2_start && t < self.window2_start + self.window2_len)
+    }
 }

@@ -14,6 +14,8 @@ pub enum LaunchError {
     InvalidDecimals,
     #[msg("Final cost is higher than max_cost (slippage)")]
     SlippageExceeded,
+    #[msg("Payout lower than specified min_payout")]
+    PayoutTooLow,
     #[msg("Math overflow")]
     MathOverflow,
     #[msg("Insufficient token supply available for purchase.")]

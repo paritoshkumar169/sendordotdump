@@ -1,97 +1,117 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use crate::constants::*;
+use anchor_lang::system_program;
+use anchor_spl::token::{self, Token, TokenAccount, TransferChecked};
 use crate::errors::LaunchError;
-use crate::state::launch_metadata::LaunchMetadata;
-use crate::state::bonding_curve_state::BondingCurveState;
-use crate::state::user_record::UserRecord;
+use crate::state::{
+    bonding_curve_state::BondingCurveState,
+    launch_metadata::LaunchMetadata,
+    user_record::UserRecord,
+};
 
-/// Context for the `sell` instruction.
+#[event]
+pub struct SellEvent {
+    pub seller: Pubkey,
+    pub qty: u64,
+    pub payout: u64,
+}
+
 #[derive(Accounts)]
 pub struct Sell<'info> {
-    #[account(mut, has_one = token_mint, has_one = vault)]
+    #[account(mut, has_one = vault, has_one = token_mint)]
     pub launch_metadata: Account<'info, LaunchMetadata>,
     #[account(mut, has_one = launch_metadata)]
     pub bonding_curve: Account<'info, BondingCurveState>,
     #[account(mut)]
+    pub token_mint: Account<'info, anchor_spl::token::Mint>,
+    #[account(mut)]
     pub vault: Account<'info, TokenAccount>,
     #[account(mut)]
-    pub token_mint: Account<'info, anchor_spl::token::Mint>,
-    #[account(mut, constraint = user_token_account.owner == seller.key() && user_token_account.mint == launch_metadata.token_mint)]
-    pub user_token_account: Account<'info, TokenAccount>,  // seller's token source
-    #[account(init_if_needed, payer = seller,
-        seeds = [b"user_record", launch_metadata.key().as_ref(), seller.key().as_ref()],
-        bump,
-        space = 8 + 32 + 8)]
+    pub seller: Signer<'info>,
+    #[account(
+        mut,
+        constraint = seller_token_account.owner == seller.key(),
+        constraint = seller_token_account.mint == token_mint.key()
+    )]
+    pub seller_token_account: Account<'info, TokenAccount>,
+    #[account(
+        init_if_needed,
+        payer  = seller,
+        space  = UserRecord::LEN,
+        seeds  = [b"user", launch_metadata.key().as_ref(), seller.key().as_ref()],
+        bump
+    )]
     pub user_record: Account<'info, UserRecord>,
-    #[account(mut)]
-    pub seller: Signer<'info>,  // user selling tokens
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }
 
-/// Allows a user to sell tokens back to the launchpad (receive lamports according to bonding curve).
-pub fn sell(ctx: Context<Sell>, amount: u64) -> Result<()> {
+pub fn sell(ctx: Context<Sell>, amount: u64, min_payout: u64) -> Result<()> {
     let launch = &mut ctx.accounts.launch_metadata;
     let curve = &mut ctx.accounts.bonding_curve;
-    let seller = &mut ctx.accounts.seller;
-    let user_record = &mut ctx.accounts.user_record;
-    let user_token_account = &ctx.accounts.user_token_account;
-    let vault = &mut ctx.accounts.vault;
+    let seller = &ctx.accounts.seller;
+    let seller_account = &ctx.accounts.seller_token_account;
+    let record = &mut ctx.accounts.user_record;
 
-    // Enforce that the current time is within a sell window
-    let now_ts = Clock::get()?.unix_timestamp;
-    let w1 = launch.window1_start;
-    let w2 = launch.window2_start;
-    let open = (now_ts >= w1 && now_ts < w1 + WINDOW_DURATION) ||
-               (now_ts >= w2 && now_ts < w2 + WINDOW_DURATION);
-    require!(open, LaunchError::NotInTradingWindow);
+    require!(curve.decimals <= 18, LaunchError::InvalidDecimals);
 
-    // Enforce one action per day per user
-    if user_record.last_action_day != 0 {
-        require!(user_record.last_action_day < launch.current_day, LaunchError::ActionAlreadyPerformed);
-    }
-    // Compute 10% of user's holdings
-    let balance = user_token_account.amount;
-    let max_sell = balance / 10;
+    let now = Clock::get()?.unix_timestamp;
+    require!(launch.is_window_open(now), LaunchError::NotInTradingWindow);
+
+    let today = (now / 86_400) as u64;
+    require!(record.last_action_day != today, LaunchError::ActionAlreadyPerformed);
+
+    let balance = seller_account.amount;
+    let max_sell = balance.checked_mul(10).ok_or(LaunchError::MathOverflow)? / 100;
     require!(amount <= max_sell, LaunchError::ExceedsSellLimit);
-    require!(amount > 0, LaunchError::ExceedsSellLimit);
 
-    // Ensure pool has enough lamports for payout
-    let decimals = curve.decimals;
-    let base_price = curve.base_price as u128;
-    let slope = curve.slope as u128;
-    let supply_before = curve.current_supply as u128;
-    let sell_amount = amount as u128;
-    // Payout = base_price * sell_amount + slope * (supply_before * sell_amount - sell_amount^2/2) / m
-    let m = 10u128.pow(decimals as u32);
-    let numerator = base_price * sell_amount * m 
-        + slope * (supply_before * sell_amount - sell_amount * (sell_amount - 1) / 2);
-    let payout = (numerator / (m * m)) as u64;
-    let pool_balance = **launch.to_account_info().lamports.borrow();
-    require!(payout <= pool_balance, LaunchError::InsufficientLiquidity);
+    let payout = curve.compute_payout(amount)?;
+    require!(payout >= min_payout, LaunchError::PayoutTooLow);
 
-    // Transfer tokens from seller to vault
-    token::transfer(
+    let launch_lamports = **launch.to_account_info().lamports.borrow();
+    require!(payout <= launch_lamports, LaunchError::InsufficientLiquidity);
+
+    token::transfer_checked(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
-            Transfer {
-                from: user_token_account.to_account_info(),
-                to: vault.to_account_info(),
+            TransferChecked {
+                from: seller_account.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
                 authority: seller.to_account_info(),
+                mint: ctx.accounts.token_mint.to_account_info(),
             },
         ),
         amount,
+        curve.decimals,
     )?;
-    // Transfer lamports from launch pool to seller
-    **launch.to_account_info().try_borrow_mut_lamports()? -= payout;
-    **seller.to_account_info().try_borrow_mut_lamports()? += payout;
 
-    // Update bonding curve supply
-    curve.current_supply = curve.current_supply.checked_sub(amount).unwrap();
-    // Update user record for daily action
-    user_record.user = seller.key();
-    user_record.last_action_day = launch.current_day;
+    let id_bytes = launch.launch_id.to_le_bytes();
+    let seeds: &[&[u8]] = &[b"launch", id_bytes.as_ref(), &[launch.bump]];
+    system_program::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: launch.to_account_info(),
+                to: seller.to_account_info(),
+            },
+            &[seeds],
+        ),
+        payout,
+    )?;
+
+    curve.current_supply = curve
+        .current_supply
+        .checked_sub(amount)
+        .ok_or(LaunchError::MathOverflow)?;
+    record.last_action_day = today;
+    if record.user == Pubkey::default() {
+        record.user = seller.key();
+    }
+
+    emit!(SellEvent {
+        seller: seller.key(),
+        qty: amount,
+        payout,
+    });
     Ok(())
 }

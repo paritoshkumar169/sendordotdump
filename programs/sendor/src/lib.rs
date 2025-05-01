@@ -32,13 +32,13 @@ pub mod sendor {
         crate::instructions::create_launch::create_launch(ctx, base_price, slope)
     }
 
-    // ──► NEW SIGNATURE: extra `max_cost` argument
     pub fn buy(ctx: Context<Buy>, amount: u64, max_cost: u64) -> Result<()> {
         crate::instructions::buy::buy(ctx, amount, max_cost)
     }
 
-    pub fn sell(ctx: Context<Sell>, amount: u64) -> Result<()> {
-        crate::instructions::sell::sell(ctx, amount)
+    // updated signature: needs `min_payout`
+    pub fn sell(ctx: Context<Sell>, amount: u64, min_payout: u64) -> Result<()> {
+        crate::instructions::sell::sell(ctx, amount, min_payout)
     }
 
     pub fn transfer(ctx: Context<TransferTokens>, amount: u64) -> Result<()> {
