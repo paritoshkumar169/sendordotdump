@@ -7,6 +7,11 @@ use crate::constants::*;
 use crate::errors::LaunchError;
 use crate::state::{bonding_curve_state::BondingCurveState, launch_metadata::LaunchMetadata};
 
+const DAY: i64 = 86_400;
+const WIN: i64 = 900;
+const MIN_GAP: i64 = 43_200;
+const MAX_GAP: i64 = 64_800;
+
 #[event]
 pub struct PurchaseEvent {
     pub buyer: Pubkey,
@@ -50,6 +55,20 @@ pub fn buy(ctx: Context<Buy>, amount: u64, max_cost: u64) -> Result<()> {
     let vault   = &mut ctx.accounts.vault;
     let buyer   = &ctx.accounts.buyer;
     let buyer_token_account = &ctx.accounts.buyer_token_account;
+
+    let now = Clock::get()?.unix_timestamp;
+    let today = (now / DAY) as u64;
+
+    if today > launch.current_day {
+        launch.current_day = today;
+        let seed = Clock::get()?.slot.wrapping_add(launch.launch_id);
+        let w1   = (seed % ((DAY - MAX_GAP - WIN) as u64)) as i64;
+        let gap  = MIN_GAP + ((seed >> 8) % ((MAX_GAP - MIN_GAP) as u64)) as i64;
+        let w2   = w1 + gap;
+        require!(w2 + WIN <= DAY, LaunchError::InvalidWindowTimes);
+        launch.window1_start = w1;
+        launch.window2_start = w2;
+    }
 
     require!(curve.decimals <= 18, LaunchError::InvalidDecimals);
 

@@ -2,32 +2,34 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum LaunchError {
-    #[msg("Trading is not allowed at this time.")]
+    #[msg("Trading window closed")]
     NotInTradingWindow,
-    #[msg("This wallet has already performed an action in the current cycle.")]
+    #[msg("Daily action already performed")]
     ActionAlreadyPerformed,
-    #[msg("Sell amount exceeds the daily 10% limit of holdings.")]
+    #[msg("Sell exceeds 10 % limit")]
     ExceedsSellLimit,
-    #[msg("Transfer amount exceeds the daily 20% limit of holdings.")]
+    #[msg("Transfer exceeds 20 % limit")]
     ExceedsTransferLimit,
     #[msg("Decimals must be 18 or fewer")]
     InvalidDecimals,
-    #[msg("Final cost is higher than max_cost (slippage)")]
+    #[msg("Slippage limit hit")]
     SlippageExceeded,
-    #[msg("Payout lower than specified min_payout")]
+    #[msg("Payout below min_payout")]
     PayoutTooLow,
     #[msg("Math overflow")]
     MathOverflow,
-    #[msg("Insufficient token supply available for purchase.")]
+    #[msg("Insufficient supply")]
     InsufficientSupply,
-    #[msg("Insufficient funds to complete the purchase.")]
+    #[msg("Insufficient funds")]
     InsufficientFunds,
-    #[msg("Insufficient liquidity in pool for the sell amount.")]
+    #[msg("Insufficient liquidity")]
     InsufficientLiquidity,
-    #[msg("Unauthorized access or incorrect signer.")]
+    #[msg("Unauthorized signer")]
     Unauthorized,
-    #[msg("Invalid trading window parameters.")]
+    #[msg("Invalid window parameters")]
     InvalidWindowTimes,
-    #[msg("Invalid launch parameters.")]
+    #[msg("Migration too early")]
+    PrematureMigration,
+    #[msg("Invalid launch parameters")]
     InvalidParams,
 }

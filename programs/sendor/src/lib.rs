@@ -7,49 +7,52 @@ pub mod errors;
 pub mod state;
 pub mod instructions;
 
-use crate::instructions::initialize::*;
-use crate::instructions::create_launch::*;
-use crate::instructions::buy::*;
-use crate::instructions::sell::*;
-use crate::instructions::transfer::*;
-use crate::instructions::update_global::*;
-use crate::instructions::set_sell_window::*;
-use crate::instructions::migrate::*;
+/* re-export every item (struct + constant) from each instruction module */
+pub use instructions::initialize::*;
+pub use instructions::create_launch::*;
+pub use instructions::buy::*;
+pub use instructions::sell::*;
+pub use instructions::transfer::*;
+pub use instructions::update_global::*;
+pub use instructions::set_sell_window::*;
+pub use instructions::migrate::*;
 
 #[program]
 pub mod sendor {
     use super::*;
+    use crate::instructions::{
+        buy, create_launch, initialize, migrate, sell, set_sell_window, transfer, update_global,
+    };
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        crate::instructions::initialize::initialize(ctx)
+        initialize::initialize(ctx)
     }
 
     pub fn create_launch(ctx: Context<CreateLaunch>, base_price: u64, slope: u64) -> Result<()> {
-        crate::instructions::create_launch::create_launch(ctx, base_price, slope)
+        create_launch::create_launch(ctx, base_price, slope)
     }
 
     pub fn buy(ctx: Context<Buy>, amount: u64, max_cost: u64) -> Result<()> {
-        crate::instructions::buy::buy(ctx, amount, max_cost)
+        buy::buy(ctx, amount, max_cost)
     }
 
     pub fn sell(ctx: Context<Sell>, amount: u64, min_payout: u64) -> Result<()> {
-        crate::instructions::sell::sell(ctx, amount, min_payout)
+        sell::sell(ctx, amount, min_payout)
     }
 
     pub fn transfer(ctx: Context<TransferTokens>, amount: u64) -> Result<()> {
-        crate::instructions::transfer::transfer(ctx, amount)
+        transfer::transfer(ctx, amount)
     }
 
     pub fn update_global(ctx: Context<UpdateGlobal>) -> Result<()> {
-        crate::instructions::update_global::update_global(ctx)
+        update_global::update_global(ctx)
     }
 
-    /// Admin/cron: picks two 15-min windows 12-18 h apart each day.
     pub fn randomize_sell_window(ctx: Context<RandomizeSellWindow>) -> Result<()> {
-        crate::instructions::set_sell_window::randomize_sell_window(ctx)
+        set_sell_window::randomize_sell_window(ctx)
     }
 
     pub fn migrate(ctx: Context<Migrate>) -> Result<()> {
-        crate::instructions::migrate::migrate(ctx)
+        migrate::migrate(ctx)
     }
 }
