@@ -1,11 +1,22 @@
 use anchor_lang::prelude::*;
 use crate::errors::LaunchError;
-use crate::state::global_state::GlobalState;
-use crate::state::launch_metadata::LaunchMetadata;
-use crate::constants::*;
+use crate::state::{global_state::GlobalState, launch_metadata::LaunchMetadata};
+
+const DAY: i64 = 86_400;
+const WIN: i64 = 900;
+const MIN_GAP: i64 = 43_200;  // 12 h
+const MAX_GAP: i64 = 64_800;  // 18 h
+
+#[event]
+pub struct SellWindowSet {
+    pub launch_id: u64,
+    pub day: u64,
+    pub w1: i64,
+    pub w2: i64,
+}
 
 #[derive(Accounts)]
-pub struct SetSellWindow<'info> {
+pub struct RandomizeSellWindow<'info> {
     #[account(has_one = admin)]
     pub global_state: Account<'info, GlobalState>,
     #[account(mut)]
@@ -13,15 +24,24 @@ pub struct SetSellWindow<'info> {
     pub admin: Signer<'info>,
 }
 
-pub fn set_sell_window(ctx: Context<SetSellWindow>, window1_start: i64, window2_start: i64) -> Result<()> {
-    let global = &ctx.accounts.global_state;
+pub fn randomize_sell_window(ctx: Context<RandomizeSellWindow>) -> Result<()> {
     let launch = &mut ctx.accounts.launch_metadata;
-    require!(ctx.accounts.admin.key() == global.admin, LaunchError::Unauthorized);
-    require!(window2_start >= window1_start + WINDOW_DURATION, LaunchError::InvalidWindowTimes);
 
-    // Advance the day counter and set specified window times
-    launch.current_day = launch.current_day.checked_add(1).unwrap();
-    launch.window1_start = window1_start;
-    launch.window2_start = window2_start;
+    let seed = Clock::get()?.slot.wrapping_add(launch.launch_id);
+    let rnd1 = (seed % ((DAY - MAX_GAP - WIN) as u64)) as i64;
+    let gap  = MIN_GAP + ((seed >> 8) % ((MAX_GAP - MIN_GAP) as u64)) as i64;
+    let rnd2 = rnd1 + gap;
+    require!(rnd2 + WIN <= DAY, LaunchError::InvalidWindowTimes);
+
+    launch.current_day = launch.current_day.checked_add(1).ok_or(LaunchError::MathOverflow)?;
+    launch.window1_start = rnd1;
+    launch.window2_start = rnd2;
+
+    emit!(SellWindowSet {
+        launch_id: launch.launch_id,
+        day: launch.current_day,
+        w1: rnd1,
+        w2: rnd2,
+    });
     Ok(())
 }

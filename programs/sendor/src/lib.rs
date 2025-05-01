@@ -24,11 +24,7 @@ pub mod sendor {
         crate::instructions::initialize::initialize(ctx)
     }
 
-    pub fn create_launch(
-        ctx: Context<CreateLaunch>,
-        base_price: u64,
-        slope: u64,
-    ) -> Result<()> {
+    pub fn create_launch(ctx: Context<CreateLaunch>, base_price: u64, slope: u64) -> Result<()> {
         crate::instructions::create_launch::create_launch(ctx, base_price, slope)
     }
 
@@ -36,7 +32,6 @@ pub mod sendor {
         crate::instructions::buy::buy(ctx, amount, max_cost)
     }
 
-    // updated signature: needs `min_payout`
     pub fn sell(ctx: Context<Sell>, amount: u64, min_payout: u64) -> Result<()> {
         crate::instructions::sell::sell(ctx, amount, min_payout)
     }
@@ -49,12 +44,9 @@ pub mod sendor {
         crate::instructions::update_global::update_global(ctx)
     }
 
-    pub fn set_sell_window(
-        ctx: Context<SetSellWindow>,
-        window1_start: i64,
-        window2_start: i64,
-    ) -> Result<()> {
-        crate::instructions::set_sell_window::set_sell_window(ctx, window1_start, window2_start)
+    /// Admin/cron: picks two 15-min windows 12-18 h apart each day.
+    pub fn randomize_sell_window(ctx: Context<RandomizeSellWindow>) -> Result<()> {
+        crate::instructions::set_sell_window::randomize_sell_window(ctx)
     }
 
     pub fn migrate(ctx: Context<Migrate>) -> Result<()> {
