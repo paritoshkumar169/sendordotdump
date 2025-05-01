@@ -10,6 +10,12 @@ pub enum LaunchError {
     ExceedsSellLimit,
     #[msg("Transfer amount exceeds the daily 20% limit of holdings.")]
     ExceedsTransferLimit,
+    #[msg("Decimals must be 18 or fewer")]
+    InvalidDecimals,
+    #[msg("Final cost is higher than max_cost (slippage)")]
+    SlippageExceeded,
+    #[msg("Math overflow")]
+    MathOverflow,
     #[msg("Insufficient token supply available for purchase.")]
     InsufficientSupply,
     #[msg("Insufficient funds to complete the purchase.")]
@@ -20,4 +26,6 @@ pub enum LaunchError {
     Unauthorized,
     #[msg("Invalid trading window parameters.")]
     InvalidWindowTimes,
+    #[msg("Invalid launch parameters.")]
+    InvalidParams,
 }

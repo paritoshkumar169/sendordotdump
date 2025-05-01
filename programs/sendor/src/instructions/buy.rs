@@ -1,80 +1,137 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_lang::system_program;
 use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{self, Token, TokenAccount, TransferChecked};
+
 use crate::constants::*;
 use crate::errors::LaunchError;
-use crate::state::launch_metadata::LaunchMetadata;
-use crate::state::bonding_curve_state::BondingCurveState;
+use crate::state::{bonding_curve_state::BondingCurveState, launch_metadata::LaunchMetadata};
 
+#[event]
+pub struct PurchaseEvent {
+    pub buyer: Pubkey,
+    pub qty:   u64,
+    pub cost:  u64,
+}
 
 #[derive(Accounts)]
 pub struct Buy<'info> {
     #[account(mut, has_one = token_mint, has_one = vault)]
     pub launch_metadata: Account<'info, LaunchMetadata>,
+
     #[account(mut, has_one = launch_metadata)]
     pub bonding_curve: Account<'info, BondingCurveState>,
+
     #[account(mut)]
     pub token_mint: Account<'info, anchor_spl::token::Mint>,
     #[account(mut)]
-    pub vault: Account<'info, TokenAccount>,  // token vault holding remaining tokens
+    pub vault:      Account<'info, TokenAccount>,
+
     #[account(mut)]
-    pub buyer: Signer<'info>,                // buyer's wallet (pays lamports)
-    #[account(init_if_needed, payer = buyer, associated_token::mint = token_mint, associated_token::authority = buyer)]
-    pub buyer_token_account: Account<'info, TokenAccount>,  // buyer's token account to receive tokens
-    pub token_program: Program<'info, Token>,
+    pub buyer: Signer<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = buyer,
+        associated_token::mint      = token_mint,
+        associated_token::authority = buyer
+    )]
+    pub buyer_token_account: Account<'info, TokenAccount>,
+
+    pub token_program:            Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
-    pub rent: Sysvar<'info, Rent>,
+    pub system_program:           Program<'info, System>,
+    pub rent:                     Sysvar<'info, Rent>,
 }
 
-pub fn buy(ctx: Context<Buy>, amount: u64) -> Result<()> {
-    let launch = &mut ctx.accounts.launch_metadata;
-    let curve  = &mut ctx.accounts.bonding_curve;
-    let vault  = &mut ctx.accounts.vault;
-    let buyer_token_account = &mut ctx.accounts.buyer_token_account;
-    let buyer  = &mut ctx.accounts.buyer;
+pub fn buy(ctx: Context<Buy>, amount: u64, max_cost: u64) -> Result<()> {
+    let launch  = &mut ctx.accounts.launch_metadata;
+    let curve   = &mut ctx.accounts.bonding_curve;
+    let vault   = &mut ctx.accounts.vault;
+    let buyer   = &ctx.accounts.buyer;
+    let buyer_token_account = &ctx.accounts.buyer_token_account;
 
+    require!(curve.decimals <= 18, LaunchError::InvalidDecimals);
 
-    let available = INITIAL_SUPPLY_BASE_UNITS.checked_sub(curve.current_supply).unwrap();
+    let available = INITIAL_SUPPLY_BASE_UNITS
+        .checked_sub(curve.current_supply)
+        .ok_or(LaunchError::InsufficientSupply)?;
     require!(amount <= available, LaunchError::InsufficientSupply);
 
-
-    let decimals = curve.decimals;
-    let base_price = curve.base_price as u128;
-    let slope = curve.slope as u128;
-    let supply_before = curve.current_supply as u128;
-    let buy_amount = amount as u128;
-    let m = 10u128.pow(decimals as u32);
-
-    let numerator = base_price * buy_amount * m 
-        + slope * (supply_before * buy_amount + buy_amount * (buy_amount + 1) / 2);
-    let cost = (numerator / (m * m)) as u64;  // integer division floors the result
+    let cost = compute_cost(curve, amount)?;
+    require!(cost <= max_cost, LaunchError::SlippageExceeded);
 
     let buyer_lamports = **buyer.to_account_info().lamports.borrow();
     require!(cost <= buyer_lamports, LaunchError::InsufficientFunds);
 
-
-    **buyer.to_account_info().try_borrow_mut_lamports()? -= cost;
-    **launch.to_account_info().try_borrow_mut_lamports()? += cost;
-
-
-    let id_bytes = launch.launch_id.to_le_bytes();
-    let seeds    = &[b"launch", id_bytes.as_ref(), &[launch.bump]];
-    let signer_seeds = &[&seeds[..]];
-    token::transfer(
-        CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            Transfer {
-                from: vault.to_account_info(),
-                to: buyer_token_account.to_account_info(),
-                authority: launch.to_account_info(),
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: buyer.to_account_info(),
+                to:   launch.to_account_info(),
             },
-            signer_seeds,
         ),
-        amount,
+        cost,
     )?;
 
+    let id_bytes = launch.launch_id.to_le_bytes();
+    let seeds: &[&[u8]] = &[b"launch", id_bytes.as_ref(), &[launch.bump]];
 
-    curve.current_supply = curve.current_supply.checked_add(amount).unwrap();
+    token::transfer_checked(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            TransferChecked {
+                from:      vault.to_account_info(),
+                to:        buyer_token_account.to_account_info(),
+                authority: launch.to_account_info(),
+                mint:      ctx.accounts.token_mint.to_account_info(),
+            },
+            &[seeds],
+        ),
+        amount,
+        curve.decimals,
+    )?;
+
+    curve.current_supply = curve
+        .current_supply
+        .checked_add(amount)
+        .ok_or(LaunchError::MathOverflow)?;
+
+    emit!(PurchaseEvent {
+        buyer: buyer.key(),
+        qty:   amount,
+        cost,
+    });
+
     Ok(())
+}
+
+fn compute_cost(curve: &BondingCurveState, qty: u64) -> Result<u64> {
+    let m       = 10u128.pow(curve.decimals as u32);
+    let base    = curve.base_price     as u128;
+    let slope   = curve.slope          as u128;
+    let supply  = curve.current_supply as u128;
+    let qty128  = qty                  as u128;
+
+    let part1 = base
+        .checked_mul(qty128)
+        .ok_or(LaunchError::MathOverflow)?
+        .checked_mul(m)
+        .ok_or(LaunchError::MathOverflow)?;
+
+    let part2 = slope
+        .checked_mul(
+            supply
+                .checked_mul(qty128)
+                .ok_or(LaunchError::MathOverflow)?
+                .checked_add(qty128 * (qty128 + 1) / 2)
+                .ok_or(LaunchError::MathOverflow)?,
+        )
+        .ok_or(LaunchError::MathOverflow)?;
+
+    let numerator = part1.checked_add(part2).ok_or(LaunchError::MathOverflow)?;
+    let denom     = m.checked_mul(m).ok_or(LaunchError::MathOverflow)?;
+
+    Ok((numerator / denom) as u64)
 }

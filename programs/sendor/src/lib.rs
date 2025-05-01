@@ -27,13 +27,14 @@ pub mod sendor {
     pub fn create_launch(
         ctx: Context<CreateLaunch>,
         base_price: u64,
-        slope: u64
+        slope: u64,
     ) -> Result<()> {
         crate::instructions::create_launch::create_launch(ctx, base_price, slope)
     }
 
-    pub fn buy(ctx: Context<Buy>, amount: u64) -> Result<()> {
-        crate::instructions::buy::buy(ctx, amount)
+    // ──► NEW SIGNATURE: extra `max_cost` argument
+    pub fn buy(ctx: Context<Buy>, amount: u64, max_cost: u64) -> Result<()> {
+        crate::instructions::buy::buy(ctx, amount, max_cost)
     }
 
     pub fn sell(ctx: Context<Sell>, amount: u64) -> Result<()> {
@@ -51,7 +52,7 @@ pub mod sendor {
     pub fn set_sell_window(
         ctx: Context<SetSellWindow>,
         window1_start: i64,
-        window2_start: i64
+        window2_start: i64,
     ) -> Result<()> {
         crate::instructions::set_sell_window::set_sell_window(ctx, window1_start, window2_start)
     }

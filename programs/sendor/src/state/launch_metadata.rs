@@ -10,3 +10,14 @@ pub struct LaunchMetadata {
     pub window2_start: i64,     // Start timestamp of the second daily trading window (UTC Unix time)
     pub bump: u8,               // PDA bump for this LaunchMetadata (for signing authority)
 }
+
+impl LaunchMetadata {
+    pub const LEN: usize = 8     // discriminator
+        + 32                     // token_mint
+        + 32                     // vault
+        + 8                      // launch_id
+        + 8                      // current_day
+        + 8                      // window1_start
+        + 8                      // window2_start
+        + 1;                     // bump
+}
