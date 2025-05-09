@@ -32,4 +32,6 @@ pub enum LaunchError {
     PrematureMigration,
     #[msg("Invalid launch parameters")]
     InvalidParams,
+    #[msg("Invalid fee recipient")]
+    InvalidFeeRecipient,
 }

@@ -24,12 +24,12 @@ pub mod sendor {
         buy, create_launch, initialize, migrate, sell, set_sell_window, transfer, update_global,
     };
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        initialize::initialize(ctx)
+    pub fn initialize(ctx: Context<Initialize>, platform_fee_recipient: Pubkey, launch_fee_lamports: u64) -> Result<()> {
+        initialize::initialize(ctx, platform_fee_recipient, launch_fee_lamports)
     }
 
-    pub fn create_launch(ctx: Context<CreateLaunch>, base_price: u64, slope: u64) -> Result<()> {
-        create_launch::create_launch(ctx, base_price, slope)
+    pub fn create_launch(ctx: Context<CreateLaunch>, base_price: u64, slope: u64, token_name: String, token_symbol: String, token_uri: String) -> Result<()> {
+        create_launch::create_launch(ctx, base_price, slope, token_name, token_symbol, token_uri)
     }
 
     pub fn buy(ctx: Context<Buy>, amount: u64, max_cost: u64) -> Result<()> {
